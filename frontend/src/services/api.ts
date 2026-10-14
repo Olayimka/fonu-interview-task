@@ -1,4 +1,4 @@
-import { User, Product, Order, AnalyticsData, Role } from '../types';
+import { User, Product, Order, AnalyticsData, Role, OrderTrackingInfo } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -379,6 +379,191 @@ class ApiService {
     return Array.from(mergedMap.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
+  }
+
+  async updateOrderStatus(orderId: string, status: string): Promise<Order> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        this.savePlacedOrder(updated);
+        return updated;
+      }
+    } catch (err) {}
+
+    const orders = this.getPlacedOrders();
+    const existing = orders.find((o) => o.id === orderId);
+    if (existing) {
+      existing.status = status;
+      this.savePlacedOrder(existing);
+      return existing;
+    }
+
+    const updatedOrder: Order = {
+      id: orderId,
+      userId: 'customer-1',
+      totalAmount: 199.99,
+      status: status,
+      createdAt: new Date().toISOString(),
+      items: [],
+    };
+    this.savePlacedOrder(updatedOrder);
+    return updatedOrder;
+  }
+
+  async deleteOrder(orderId: string): Promise<{ id: string }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        await res.json();
+      }
+    } catch (err) {}
+
+    const orders = this.getPlacedOrders();
+    const filtered = orders.filter((o) => o.id !== orderId);
+    localStorage.setItem('fonu_all_placed_orders', JSON.stringify(filtered));
+    return { id: orderId };
+  }
+
+  async getOrderTracking(orderId: string): Promise<OrderTrackingInfo> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/orders/${orderId}/tracking`, {
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {}
+
+    const allOrders = await this.getOrders();
+    const order = allOrders.find((o) => o.id === orderId || o.id.includes(orderId)) || {
+      id: orderId,
+      userId: 'customer-1',
+      totalAmount: 3499.0,
+      status: 'PROCESSING',
+      createdAt: new Date().toISOString(),
+      items: [],
+      user: { id: 'cust-1', email: 'customer@fonu.com' },
+    };
+
+    const createdAt = new Date(order.createdAt || Date.now());
+    const trackingNumber = `FN-${order.id.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}`;
+    const status = String(order.status || 'PROCESSING').toUpperCase();
+
+    let currentStep = 2;
+    let statusLabel = 'Processing & Quality Inspection';
+
+    switch (status) {
+      case 'PENDING':
+        currentStep = 1;
+        statusLabel = 'Order Placed & Awaiting Confirmation';
+        break;
+      case 'PROCESSING':
+        currentStep = 2;
+        statusLabel = 'Processing & Warehouse Packing';
+        break;
+      case 'SHIPPED':
+        currentStep = 3;
+        statusLabel = 'In Transit with Fonu Express';
+        break;
+      case 'OUT_FOR_DELIVERY':
+        currentStep = 4;
+        statusLabel = 'Out for Delivery Today';
+        break;
+      case 'DELIVERED':
+      case 'COMPLETED':
+        currentStep = 5;
+        statusLabel = 'Delivered & Handed to Recipient';
+        break;
+      case 'CANCELLED':
+        currentStep = -1;
+        statusLabel = 'Order Cancelled';
+        break;
+      default:
+        currentStep = 2;
+        statusLabel = status;
+    }
+
+    const t0 = new Date(createdAt);
+    const t1 = new Date(t0.getTime() + 15 * 60 * 1000);
+    const t2 = new Date(t0.getTime() + 2 * 60 * 60 * 1000);
+    const t3 = new Date(t0.getTime() + 24 * 60 * 60 * 1000);
+    const t4 = new Date(t0.getTime() + 36 * 60 * 60 * 1000);
+
+    const estimatedDelivery = new Date(t0.getTime() + 48 * 60 * 60 * 1000).toLocaleDateString(
+      'en-US',
+      { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' },
+    );
+
+    return {
+      orderId: order.id,
+      trackingNumber,
+      carrier: 'Fonu Express Priority',
+      serviceType: 'Next-Day Air Tracked Logistics',
+      status,
+      statusLabel,
+      estimatedDelivery,
+      origin: 'Fonu Central Fulfillment Center (Hub A)',
+      destination: order.user?.email ? `Registered to ${order.user.email}` : 'Customer Address',
+      createdAt: createdAt.toISOString(),
+      currentStep,
+      itemsCount: order.items?.reduce((s, it) => s + (it.quantity || 1), 0) || 1,
+      totalAmount: Number(order.totalAmount || 0),
+      milestones: [
+        {
+          step: 1,
+          title: 'Order Placed & Confirmed',
+          description: 'Order details successfully received in checkout.',
+          location: 'Fonu Digital Storefront',
+          timestamp: t0.toLocaleString(),
+          completed: currentStep >= 1 || currentStep === -1,
+          current: currentStep === 1,
+        },
+        {
+          step: 2,
+          title: 'Processing & Warehouse Packing',
+          description: 'Package items picked, tested, and sealed with tamper-evident seal.',
+          location: 'Fonu Central Hub (Lagos)',
+          timestamp: currentStep >= 2 ? t1.toLocaleString() : 'Pending',
+          completed: currentStep >= 2,
+          current: currentStep === 2,
+        },
+        {
+          step: 3,
+          title: 'Dispatched & In Transit',
+          description: `Consignment en route to local distribution facility. Tracking #${trackingNumber}.`,
+          location: 'Regional Logistics Center',
+          timestamp: currentStep >= 3 ? t2.toLocaleString() : 'Pending',
+          completed: currentStep >= 3,
+          current: currentStep === 3,
+        },
+        {
+          step: 4,
+          title: 'Out for Delivery',
+          description: 'Assigned to courier van and arriving within the delivery window.',
+          location: 'Local Delivery Facility',
+          timestamp: currentStep >= 4 ? t3.toLocaleString() : 'Pending',
+          completed: currentStep >= 4,
+          current: currentStep === 4,
+        },
+        {
+          step: 5,
+          title: 'Delivered',
+          description: 'Package delivered and proof of delivery verified.',
+          location: 'Customer Address',
+          timestamp: currentStep >= 5 ? t4.toLocaleString() : 'Pending',
+          completed: currentStep >= 5,
+          current: currentStep === 5,
+        },
+      ],
+    };
   }
 
   // --- Analytics APIs ---

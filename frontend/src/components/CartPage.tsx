@@ -19,9 +19,16 @@ import {
 interface CartPageProps {
   onBackToShopping: () => void;
   onOpenAuth: () => void;
+  onTrackOrder?: (orderId: string) => void;
+  onViewOrderHistory?: () => void;
 }
 
-export const CartPage: React.FC<CartPageProps> = ({ onBackToShopping, onOpenAuth }) => {
+export const CartPage: React.FC<CartPageProps> = ({
+  onBackToShopping,
+  onOpenAuth,
+  onTrackOrder,
+  onViewOrderHistory,
+}) => {
   const { cart, updateQuantity, removeFromCart, clearCart, totalAmount, totalItems } = useCart();
   const { user } = useAuth();
 
@@ -139,12 +146,33 @@ export const CartPage: React.FC<CartPageProps> = ({ onBackToShopping, onOpenAuth
           </div>
         </div>
 
-        <button
-          onClick={onBackToShopping}
-          className="px-8 py-3.5 bg-[#FACC15] hover:bg-yellow-400 text-slate-950 font-black rounded-xl shadow-sm transition active:scale-95 text-xs"
-        >
-          Continue Shopping
-        </button>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          {onTrackOrder && (
+            <button
+              onClick={() => onTrackOrder(orderSuccess.id)}
+              className="w-full sm:w-auto px-6 py-3.5 bg-[#FACC15] hover:bg-yellow-400 text-slate-950 font-black rounded-xl shadow-md transition active:scale-95 text-xs flex items-center justify-center space-x-2"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Track This Order Live</span>
+            </button>
+          )}
+
+          {onViewOrderHistory && (
+            <button
+              onClick={onViewOrderHistory}
+              className="w-full sm:w-auto px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition active:scale-95 text-xs flex items-center justify-center space-x-1.5"
+            >
+              <span>View Order History</span>
+            </button>
+          )}
+
+          <button
+            onClick={onBackToShopping}
+            className="w-full sm:w-auto px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition active:scale-95 text-xs"
+          >
+            Continue Shopping
+          </button>
+        </div>
       </div>
     );
   }

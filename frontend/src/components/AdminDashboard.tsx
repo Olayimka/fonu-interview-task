@@ -17,7 +17,10 @@ import {
   FileSpreadsheet,
   Upload,
   Image as ImageIcon,
+  Truck,
+  Search,
 } from 'lucide-react';
+import { TrackOrderModal } from './TrackOrderModal';
 
 export const AdminDashboard: React.FC = () => {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -31,6 +34,12 @@ export const AdminDashboard: React.FC = () => {
   // Notifications
   const [errorAlert, setErrorAlert] = useState<string | null>(null);
   const [successAlert, setSuccessAlert] = useState<string | null>(null);
+
+  // Orders Ledger Controls
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED'>('ALL');
+  const [selectedTrackingOrderId, setSelectedTrackingOrderId] = useState<string | null>(null);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   // Product Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -122,6 +131,32 @@ export const AdminDashboard: React.FC = () => {
       console.warn('Failed to load orders:', err);
     } finally {
       setLoadingOrders(false);
+    }
+  };
+
+  const handleUpdateStatus = async (orderId: string, newStatus: string) => {
+    setUpdatingOrderId(orderId);
+    try {
+      await api.updateOrderStatus(orderId, newStatus);
+      setSuccessAlert(`Order #${orderId.slice(0, 8)} status updated to ${newStatus}`);
+      setTimeout(() => setSuccessAlert(null), 3000);
+      await fetchOrders();
+    } catch (err: any) {
+      setErrorAlert(`Failed to update order status: ${err.message}`);
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm(`Are you sure you want to delete order #${orderId}? Inventory units will be restored.`)) return;
+    try {
+      await api.deleteOrder(orderId);
+      setSuccessAlert(`Order #${orderId.slice(0, 8)} deleted successfully`);
+      setTimeout(() => setSuccessAlert(null), 3000);
+      await fetchOrders();
+    } catch (err: any) {
+      setErrorAlert(`Failed to delete order: ${err.message}`);
     }
   };
 
@@ -434,90 +469,187 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Global Order Ledger Section */}
       <div className="space-y-4 pt-4 border-t border-slate-200">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-sky-600" />
-              Global Order Ledger
+              Global Order Ledger & Tracking
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Live audit record of every customer order placed in the system
+              Manage incoming customer orders, update delivery progress, and inspect live carrier telemetry
             </p>
           </div>
           <button
             onClick={fetchOrders}
             disabled={loadingOrders}
-            className="p-2 text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-sm"
+            className="p-2 text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition shadow-sm self-start sm:self-auto"
+            title="Refresh orders ledger"
           >
             <RefreshCw className={`w-4 h-4 ${loadingOrders ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
+        {/* Filter and Search Bar for Orders */}
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+          <div className="relative w-full md:w-80">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={orderSearch}
+              onChange={(e) => setOrderSearch(e.target.value)}
+              placeholder="Search by customer email or order ID..."
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-sky-500 text-xs"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1 w-full md:w-auto">
+            {(['ALL', 'PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const).map((st) => (
+              <button
+                key={st}
+                onClick={() => setOrderStatusFilter(st)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  orderStatusFilter === st
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {st === 'ALL' ? 'All Orders' : st}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs min-w-[650px]">
+            <table className="w-full text-left text-xs min-w-[760px]">
               <thead className="bg-slate-50 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
                 <tr>
                   <th className="py-3.5 px-4">Order ID</th>
                   <th className="py-3.5 px-4">Customer</th>
                   <th className="py-3.5 px-4">Items Breakdown</th>
                   <th className="py-3.5 px-4">Total Amount</th>
-                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4">Fulfillment Status</th>
                   <th className="py-3.5 px-4">Timestamp</th>
+                  <th className="py-3.5 px-4 text-right">Actions & Tracking</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loadingOrders ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-500">
+                    <td colSpan={7} className="py-12 text-center text-slate-500">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-sky-500" />
                       Loading ledger records...
                     </td>
                   </tr>
                 ) : orders.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
+                    <td colSpan={7} className="py-8 text-center text-slate-500">
                       No customer orders have been processed yet.
                     </td>
                   </tr>
                 ) : (
-                  orders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-50 transition">
-                      <td className="py-3.5 px-4 font-mono font-bold text-sky-700">
-                        #{order.id.slice(0, 8)}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-800 font-mono">
-                        {order.user?.email || order.userId}
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-700">
-                        <div className="space-y-0.5">
-                          {order.items?.map((item) => (
-                            <div key={item.id} className="text-[11px]">
-                              <span className="font-bold text-amber-600">{item.quantity}×</span>{' '}
-                              {item.product?.name || 'Item'} (${Number(item.priceAtPurchase).toFixed(2)})
+                  orders
+                    .filter((ord) => {
+                      const st = (ord.status || 'PROCESSING').toUpperCase();
+                      if (orderStatusFilter !== 'ALL') {
+                        if (orderStatusFilter === 'DELIVERED' && (st === 'DELIVERED' || st === 'COMPLETED')) {
+                          // match
+                        } else if (st !== orderStatusFilter) {
+                          return false;
+                        }
+                      }
+                      if (orderSearch.trim()) {
+                        const q = orderSearch.toLowerCase();
+                        const matchId = ord.id.toLowerCase().includes(q);
+                        const matchEmail = (ord.user?.email || '').toLowerCase().includes(q);
+                        return matchId || matchEmail;
+                      }
+                      return true;
+                    })
+                    .map((order) => {
+                      const currentStatus = (order.status || 'PROCESSING').toUpperCase();
+                      const isUpdating = updatingOrderId === order.id;
+
+                      return (
+                        <tr key={order.id} className="hover:bg-slate-50 transition">
+                          <td className="py-3.5 px-4 font-mono font-bold text-sky-700">
+                            #{order.id.slice(0, 8)}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-800 font-mono">
+                            {order.user?.email || order.userId}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-700">
+                            <div className="space-y-0.5">
+                              {order.items?.map((item) => (
+                                <div key={item.id} className="text-[11px]">
+                                  <span className="font-bold text-amber-600">{item.quantity}×</span>{' '}
+                                  {item.product?.name || 'Item'} (${Number(item.priceAtPurchase).toFixed(2)})
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 font-mono font-black text-slate-900">
-                        ${Number(order.totalAmount).toFixed(2)}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="text-[11px] px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold rounded-full font-mono">
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px]">
-                        {new Date(order.createdAt).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-black text-slate-900">
+                            ${Number(order.totalAmount).toFixed(2)}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {/* Live Status Selector */}
+                            <select
+                              value={currentStatus === 'COMPLETED' ? 'DELIVERED' : currentStatus}
+                              disabled={isUpdating}
+                              onChange={(e) => handleUpdateStatus(order.id, e.target.value)}
+                              className={`text-[11px] font-bold rounded-lg px-2 py-1 border focus:outline-none cursor-pointer transition ${
+                                currentStatus === 'DELIVERED' || currentStatus === 'COMPLETED'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                  : currentStatus === 'SHIPPED' || currentStatus === 'OUT_FOR_DELIVERY'
+                                  ? 'bg-sky-50 text-sky-800 border-sky-300'
+                                  : currentStatus === 'CANCELLED'
+                                  ? 'bg-rose-50 text-rose-800 border-rose-300'
+                                  : 'bg-amber-50 text-amber-900 border-amber-300'
+                              }`}
+                            >
+                              <option value="PENDING">PENDING</option>
+                              <option value="PROCESSING">PROCESSING</option>
+                              <option value="SHIPPED">SHIPPED</option>
+                              <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>
+                              <option value="DELIVERED">DELIVERED</option>
+                              <option value="CANCELLED">CANCELLED</option>
+                            </select>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px]">
+                            {new Date(order.createdAt).toLocaleString()}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              {/* Track Shipment Button */}
+                              <button
+                                onClick={() => setSelectedTrackingOrderId(order.id)}
+                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg font-bold text-[11px] flex items-center space-x-1 transition shadow-xs"
+                                title="Open Live Shipment Tracker"
+                              >
+                                <Truck className="w-3 h-3 text-amber-600" />
+                                <span>Track</span>
+                              </button>
+
+                              {/* Delete Order Button */}
+                              <button
+                                onClick={() => handleDeleteOrder(order.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                title="Delete Order record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                 )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
 
       {/* Product Create/Edit Modal */}
       {isModalOpen && (
@@ -685,6 +817,12 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Standalone Tracking Modal */}
+      <TrackOrderModal
+        orderId={selectedTrackingOrderId}
+        onClose={() => setSelectedTrackingOrderId(null)}
+      />
     </div>
   );
 };
+

@@ -55,3 +55,31 @@ export interface CartItem {
   product: Product;
   quantity: number;
 }
+
+export interface TrackingMilestone {
+  step: number;
+  title: string;
+  description: string;
+  location: string;
+  timestamp: string;
+  completed: boolean;
+  current: boolean;
+}
+
+export interface OrderTrackingInfo {
+  orderId: string;
+  trackingNumber: string;
+  carrier: string;
+  serviceType: string;
+  status: string;
+  statusLabel: string;
+  estimatedDelivery: string;
+  origin: string;
+  destination: string;
+  createdAt: string;
+  currentStep: number;
+  milestones: TrackingMilestone[];
+  itemsCount: number;
+  totalAmount: number;
+}
+

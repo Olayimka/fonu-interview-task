@@ -9,6 +9,7 @@ import {
   ArrowRightLeft,
   ShoppingCart,
   Store,
+  Truck,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -16,7 +17,8 @@ interface NavbarProps {
   onGoToHome: () => void;
   onGoToInventory: () => void;
   onGoToCart: () => void;
-  currentView?: 'home' | 'inventory' | 'cart';
+  onGoToOrders: () => void;
+  currentView?: 'home' | 'inventory' | 'cart' | 'orders' | 'dashboard';
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -24,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onGoToHome,
   onGoToInventory,
   onGoToCart,
+  onGoToOrders,
   currentView = 'home',
 }) => {
   const { user, logout, quickLoginAsAdmin, quickLoginAsCustomer } = useAuth();
@@ -71,10 +74,34 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Store className="w-3.5 h-3.5" />
             <span>Store Inventory</span>
           </button>
+          <button
+            onClick={onGoToOrders}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
+              currentView === 'orders'
+                ? 'text-[#0284C7] bg-sky-50 border border-sky-200'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5 text-amber-500" />
+            <span>Track Orders</span>
+          </button>
         </div>
 
         {/* Right side controls */}
         <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Quick Orders Button on mobile/header */}
+          <button
+            onClick={onGoToOrders}
+            className={`sm:hidden p-2.5 rounded-xl border transition ${
+              currentView === 'orders'
+                ? 'bg-amber-50 border-amber-400 text-amber-600'
+                : 'bg-slate-50 border-slate-200 text-slate-700 hover:text-[#0284C7] hover:border-sky-300 hover:bg-sky-50'
+            }`}
+            title="Track Orders"
+          >
+            <Truck className="w-4 h-4" />
+          </button>
+
           {/* Cart Icon Button with dynamic badge */}
           <button
             onClick={onGoToCart}

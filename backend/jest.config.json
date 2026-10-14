@@ -1,14 +1,11 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
-  "testMatch": ["<rootDir>/src/**/*.spec.ts"],
+  "rootDir": "src",
+  "testRegex": ".*\\.spec\\.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
-  "haste": {
-    "enableSymlinks": true,
-    "forceNodeFilesystemAPI": true
-  },
-  "watchman": false,
+  "collectCoverageFrom": ["**/*.(t|j)s"],
+  "coverageDirectory": "../coverage",
   "testEnvironment": "node"
 }

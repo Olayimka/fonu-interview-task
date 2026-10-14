@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { InventoryView } from './components/InventoryView';
 import { CartPage } from './components/CartPage';
 import { AdminDashboard } from './components/AdminDashboard';
+import { OrderHistoryView } from './components/OrderHistoryView';
 import { AuthModal } from './components/AuthModal';
 import { Footer } from './components/Footer';
 import { Product } from './types';
@@ -18,7 +19,8 @@ import {
 export const AppContent: React.FC = () => {
   const { user, isLoading, quickLoginAsCustomer } = useAuth();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'inventory' | 'cart' | 'dashboard'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'inventory' | 'cart' | 'orders' | 'dashboard'>('home');
+  const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
@@ -106,7 +108,11 @@ export const AppContent: React.FC = () => {
         onGoToHome={() => setCurrentView('home')}
         onGoToInventory={() => setCurrentView('inventory')}
         onGoToCart={() => setCurrentView('cart')}
-        currentView={currentView === 'dashboard' ? 'home' : currentView}
+        onGoToOrders={() => {
+          setActiveTrackingOrderId(null);
+          setCurrentView('orders');
+        }}
+        currentView={currentView}
       />
 
       <main className="flex-1 w-full">
@@ -131,6 +137,21 @@ export const AppContent: React.FC = () => {
           <CartPage
             onBackToShopping={() => setCurrentView('inventory')}
             onOpenAuth={() => setIsAuthOpen(true)}
+            onTrackOrder={(orderId) => {
+              setActiveTrackingOrderId(orderId);
+              setCurrentView('orders');
+            }}
+            onViewOrderHistory={() => {
+              setActiveTrackingOrderId(null);
+              setCurrentView('orders');
+            }}
+          />
+        ) : currentView === 'orders' ? (
+          /* Dedicated Customer Order History & Tracking View */
+          <OrderHistoryView
+            onBackToShopping={() => setCurrentView('inventory')}
+            onOpenAuth={() => setIsAuthOpen(true)}
+            initialTrackingOrderId={activeTrackingOrderId}
           />
         ) : currentView === 'inventory' ? (
           /* Dedicated 2-Column Inventory Catalog View */
